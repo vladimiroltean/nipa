@@ -1,4 +1,4 @@
-FROM debian:bookworm
+FROM debian:trixie
 
 # Duplicate uid useradd option is necessary for people who run this as root.
 ARG nipauid
