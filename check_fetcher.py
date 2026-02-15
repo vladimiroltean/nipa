@@ -44,7 +44,6 @@ def main():
     retain_history_days = 60         # how much data we want in the JSON
     look_back_days = 8               # oldest patch we may change state of
     expect_checks_stable_hours = 50  # oldest patch where checks themselves may change
-    delegate = "netdev"
 
     pw = Patchwork(config)
 
@@ -53,7 +52,7 @@ def main():
     now = datetime.datetime.now()
     since = now - datetime.timedelta(days=look_back_days)
 
-    json_resp = pw.get_patches_all(delegate=delegate, since=since)
+    json_resp = pw.get_patches_all(since=since)
     jdb = []
     old_unchanged = 0
     check_updates = 0
