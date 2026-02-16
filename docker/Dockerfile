@@ -19,7 +19,6 @@ RUN apt-get update && apt-get install -y \
 	libssl-dev \
 	libelf-dev \
 	clang lld llvm \
-	sparse \
 	bc \
 	cpio \
 	gdb \
@@ -37,10 +36,14 @@ RUN git config --global user.email "nipa@patchwork.hopto.org"
 
 ENV VIRTUAL_ENV=/home/nipa/venv
 RUN python3 -m venv $VIRTUAL_ENV
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+ENV PATH="$VIRTUAL_ENV/bin:/home/nipa/bin:$PATH"
 
 COPY --chown=nipa:nipa requirements.txt /home/nipa/requirements.txt
 
 RUN pip install -r /home/nipa/requirements.txt
 
 RUN mkdir -p /home/nipa/.local/share/patatt
+
+RUN git clone --depth=1 https://git.kernel.org/pub/scm/devel/sparse/sparse.git /tmp/sparse && \
+    cd /tmp/sparse && make -j $(nproc) && make install && \
+    rm -rf /tmp/sparse
