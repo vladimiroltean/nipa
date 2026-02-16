@@ -2,4 +2,7 @@ patatt
 requests
 ply
 GitPython
+psycopg2
+pyinotify
+inotify_simple
 yamllint
