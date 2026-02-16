@@ -58,6 +58,10 @@ USER nipa
 
 RUN git config --global user.name "NIPA"
 RUN git config --global user.email "tester@nipa.org"
+RUN if [ -n "$HTTP_PROXY" ]; then \
+	git config --global http.proxy "$HTTP_PROXY" && \
+	git config --global https.proxy "${HTTPS_PROXY:-$HTTP_PROXY}"; \
+    fi
 
 ENV VIRTUAL_ENV=/home/nipa/venv
 RUN python3 -m venv $VIRTUAL_ENV
