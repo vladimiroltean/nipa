@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
 	python3-venv \
 	python3-pip \
 	python3-dev \
+	curl \
 	git \
 	build-essential \
 	ccache \
@@ -25,7 +26,24 @@ RUN apt-get update && apt-get install -y \
 	strace \
 	vim \
 	libpq-dev \
+	perl \
+	libdbd-sqlite3-perl \
+	libsearch-xapian-perl \
+	libmail-imapclient-perl \
+	libterm-readkey-perl \
+	libio-socket-ssl-perl \
+	liburi-perl \
  && rm -rf /var/lib/apt/lists/*
+
+# Clone and install public-inbox
+# The upstream source (https://public-inbox.org/public-inbox.git) is unreliable,
+# often returning "Failed to connect to public-inbox.org port 443 after 464 ms: Connection refused".
+# Use a mirror when available, otherwise fallback to upstream.
+ARG PUBLIC_INBOX_MIRROR
+RUN PUBLIC_INBOX_REPO="${PUBLIC_INBOX_MIRROR:-https://public-inbox.org/public-inbox.git}" && \
+    git clone "$PUBLIC_INBOX_REPO" /tmp/public-inbox && \
+    cd /tmp/public-inbox && perl Makefile.PL && make && \
+    make install && rm -rf /tmp/public-inbox
 
 USER nipa
 
