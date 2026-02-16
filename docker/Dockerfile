@@ -18,13 +18,15 @@ RUN apt-get update && apt-get install -y \
 	gawk \
 	libssl-dev \
 	libelf-dev \
-	clang lld llvm \
+	clang lld llvm llvm-dev \
 	bc \
 	cpio \
 	gdb \
 	strace \
 	vim \
 	libpq-dev \
+	iputils-ping \
+	iproute2 \
 	perl \
 	libdbd-sqlite3-perl \
 	libsearch-xapian-perl \
@@ -32,6 +34,14 @@ RUN apt-get update && apt-get install -y \
 	libterm-readkey-perl \
 	libio-socket-ssl-perl \
 	liburi-perl \
+	swig \
+	libnl-3-dev \
+	shellcheck \
+	libmnl-dev \
+	libxml2-dev \
+	libsqlite3-dev \
+	coreutils \
+	jq \
  && rm -rf /var/lib/apt/lists/*
 
 # Clone and install public-inbox
