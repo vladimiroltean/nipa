@@ -1,0 +1,5 @@
+patatt
+requests
+ply
+GitPython
+yamllint

@@ -7,8 +7,10 @@ RUN useradd -o -m -u $nipauid nipa
 RUN apt-get update && apt-get install -y \
 	procps \
 	python3 \
+	python3-venv \
+	python3-pip \
+	python3-dev \
 	git \
-	patatt \
 	build-essential \
 	ccache \
 	flex \
@@ -23,15 +25,20 @@ RUN apt-get update && apt-get install -y \
 	gdb \
 	strace \
 	vim \
-	python3-requests \
-	# for spdxcheck.py:
-	python3-ply \
-	python3-git \
+	libpq-dev \
  && rm -rf /var/lib/apt/lists/*
 
 # This is also needed for people who are running as root.
 RUN git config --global --add safe.directory /nipa-run/tree
 
 USER nipa
+
+ENV VIRTUAL_ENV=/home/nipa/venv
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+COPY --chown=nipa:nipa requirements.txt /home/nipa/requirements.txt
+
+RUN pip install -r /home/nipa/requirements.txt
 
 RUN mkdir -p /home/nipa/.local/share/patatt
