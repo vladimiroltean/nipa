@@ -29,7 +29,9 @@ RUN apt-get update && apt-get install -y \
 	python3-git \
  && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /home/nipa/.local/share/patatt && chown -R nipa: /home/nipa
-
 # This is also needed for people who are running as root.
 RUN git config --global --add safe.directory /nipa-run/tree
+
+USER nipa
+
+RUN mkdir -p /home/nipa/.local/share/patatt
