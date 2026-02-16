@@ -28,10 +28,12 @@ RUN apt-get update && apt-get install -y \
 	libpq-dev \
  && rm -rf /var/lib/apt/lists/*
 
-# This is also needed for people who are running as root.
-RUN git config --global --add safe.directory /nipa-run/tree
-
 USER nipa
+
+# This fake email address is not completely arbitrary. Others will cause
+# tests/patch/cc_maintainers/test.py to complain that we were not CCed.
+RUN git config --global user.name "nipa"
+RUN git config --global user.email "nipa@patchwork.hopto.org"
 
 ENV VIRTUAL_ENV=/home/nipa/venv
 RUN python3 -m venv $VIRTUAL_ENV
