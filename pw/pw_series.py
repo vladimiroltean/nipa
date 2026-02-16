@@ -61,6 +61,11 @@ class PwSeries(Series):
                             pids[j] = pid
                         found = True
                         break
+
+                # For single-patch series, if no "1/1" pattern found, accept it anyway
+                if not found and total == 1:
+                    found = True
+
                 if not found:
                     log("Patch order - not all patches were found!", "")
                     pids = []
