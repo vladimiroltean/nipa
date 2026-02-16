@@ -28,10 +28,10 @@ RUN apt-get update && apt-get install -y \
 	libpq-dev \
  && rm -rf /var/lib/apt/lists/*
 
-# This is also needed for people who are running as root.
-RUN git config --global --add safe.directory /nipa-run/tree
-
 USER nipa
+
+RUN git config --global user.name "NIPA"
+RUN git config --global user.email "tester@nipa.org"
 
 ENV VIRTUAL_ENV=/home/nipa/venv
 RUN python3 -m venv $VIRTUAL_ENV
