@@ -62,6 +62,10 @@ USER nipa
 # tests/patch/cc_maintainers/test.py to complain that we were not CCed.
 RUN git config --global user.name "nipa"
 RUN git config --global user.email "nipa@patchwork.hopto.org"
+RUN if [ -n "$HTTP_PROXY" ]; then \
+	git config --global http.proxy "$HTTP_PROXY" && \
+	git config --global https.proxy "${HTTPS_PROXY:-$HTTP_PROXY}"; \
+    fi
 
 ENV VIRTUAL_ENV=/home/nipa/venv
 RUN python3 -m venv $VIRTUAL_ENV
