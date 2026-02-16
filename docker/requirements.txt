@@ -2,7 +2,9 @@ patatt
 requests
 ply
 GitPython
+jsonschema
 psycopg2
 pyinotify
 inotify_simple
+dtschema
 yamllint
