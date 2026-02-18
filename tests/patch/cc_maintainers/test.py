@@ -82,7 +82,7 @@ class StalenessEntry:
 
     def reload(self, since_months):
         res = subprocess.run(['lei', 'q', f"f:{self.email} AND d:{since_months}.months.ago..",
-                              '--no-save', '-q', '-O', 'https://lore.kernel.org/netdev'],
+                              '--no-save', '-q', '-O', 'https://lore.kernel.org/linux-phy'],
                              stdout=subprocess.PIPE)
         output = res.stdout.decode('utf-8', 'replace')
 
