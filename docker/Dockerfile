@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
 	python3-dev \
 	curl \
 	git \
+	gnupg \
 	build-essential \
 	ccache \
 	flex \
@@ -60,7 +61,10 @@ COPY --chown=nipa:nipa requirements.txt /home/nipa/requirements.txt
 
 RUN pip install -r /home/nipa/requirements.txt
 
-RUN mkdir -p /home/nipa/.local/share/patatt
+# This is https://git.kernel.org/pub/scm/docs/kernel/pgpkeys.git,
+# prefer to keep it checked out as separate volume for more control
+RUN mkdir -p /home/nipa/.local/share/patatt/ && \
+    ln -sf /pgpkeys/.keyring /home/nipa/.local/share/patatt/public
 
 RUN git clone --depth=1 https://git.kernel.org/pub/scm/devel/sparse/sparse.git /tmp/sparse && \
     cd /tmp/sparse && make -j $(nproc) && make install && \
