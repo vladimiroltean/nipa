@@ -1,0 +1,410 @@
+From e11b0e2e93759bf524cd4183044a0404217dea2f Mon Sep 17 00:00:00 2001
+From: Eric Zhang <zxh@xh-zhang.com>
+Date: Tue, 24 Feb 2026 21:29:50 -0800
+Subject: [PATCH] pre-process: add __VA_OPT__ support
+
+Add __VA_OPT__ support (C23 6.10.5) including some tests.
+
+At expansion time, substitute() checks whether the variadic
+argument is empty: if so, skip the region between the markers;
+otherwise, process the enclosed tokens normally.
+
+Signed-off-by: Eric Zhang <zxh@xh-zhang.com>
+Link: https://lore.kernel.org/linux-sparse/20260225081413.2480484-1-zxh@xh-zhang.com/T/#u
+Signed-off-by: Vladimir Oltean <vladimir.oltean@nxp.com>
+---
+ ident-list.h                            |   1 +
+ pre-process.c                           | 132 ++++++++++++++++++++++++
+ token.h                                 |   2 +
+ tokenize.c                              |   6 ++
+ validation/preprocessor/va-opt-errors.c |  38 +++++++
+ validation/preprocessor/va-opt.c        |  66 ++++++++++++
+ 6 files changed, 245 insertions(+)
+ create mode 100644 validation/preprocessor/va-opt-errors.c
+ create mode 100644 validation/preprocessor/va-opt.c
+
+diff --git a/ident-list.h b/ident-list.h
+index 3c08e8ca9aa4..556d4050c88d 100644
+--- a/ident-list.h
++++ b/ident-list.h
+@@ -65,6 +65,7 @@ IDENT(c_generic_selections);
+ IDENT(c_static_assert);
+ __IDENT(pragma_ident, "__pragma__", 0);
+ __IDENT(__VA_ARGS___ident, "__VA_ARGS__", 0);
++__IDENT(__VA_OPT___ident, "__VA_OPT__", 0);
+ __IDENT(__func___ident, "__func__", 0);
+ __IDENT(__FUNCTION___ident, "__FUNCTION__", 0);
+ __IDENT(__PRETTY_FUNCTION___ident, "__PRETTY_FUNCTION__", 0);
+diff --git a/pre-process.c b/pre-process.c
+index 4e322855d600..ec4c7b9828b5 100644
+--- a/pre-process.c
++++ b/pre-process.c
+@@ -643,13 +643,37 @@ static struct token **substitute(struct token **list, const struct token *body,
+ 	struct position *base_pos = &(*list)->pos;
+ 	int *count;
+ 	enum {Normal, Placeholder, Concat} state = Normal;
++	int va_opt_ws = 0;
+ 
+ 	for (; !eof_token(body); body = body->next) {
+ 		struct token *added, *arg;
+ 		struct token **tail;
+ 		const struct token *t;
++		struct arg *va;
++		int is_empty;
+ 
+ 		switch (token_type(body)) {
++		case TOKEN_VA_OPT_START:
++			va = &args[body->argnum];
++			is_empty = (!va->arg || eof_token(va->arg)) &&
++				   (!va->expanded || eof_token(va->expanded));
++			if (is_empty) {
++				/* empty varargs: skip to end marker */
++				while (token_type(body) != TOKEN_VA_OPT_END)
++					body = body->next;
++				if (state == Concat)
++					state = Normal;
++				else
++					state = Placeholder;
++				continue;
++			}
++			/* non-empty: skip marker, transfer whitespace */
++			va_opt_ws = body->pos.whitespace;
++			continue;
++
++		case TOKEN_VA_OPT_END:
++			continue;
++
+ 		case TOKEN_GNU_KLUDGE:
+ 			/*
+ 			 * GNU kludge: if we had <comma>##<vararg>, behaviour
+@@ -728,6 +752,10 @@ static struct token **substitute(struct token **list, const struct token *body,
+ 			if (tail != &added->next)
+ 				list = tail;
+ 		} else {
++			if (va_opt_ws) {
++				added->pos.whitespace = va_opt_ws;
++				va_opt_ws = 0;
++			}
+ 			*list = added;
+ 			list = tail;
+ 		}
+@@ -747,6 +775,8 @@ static int expand(struct token **list, struct symbol *sym)
+ 	int nargs = sym->arglist ? sym->arglist->count.normal : 0;
+ 	struct arg args[nargs];
+ 
++	memset(args, 0, sizeof(args));
++
+ 	if (expanding->tainted) {
+ 		token->pos.noexpand = 1;
+ 		return 1;
+@@ -1019,6 +1049,7 @@ static int token_different(struct token *t1, struct token *t2)
+ 	case TOKEN_UNTAINT:
+ 	case TOKEN_CONCAT:
+ 	case TOKEN_GNU_KLUDGE:
++	case TOKEN_VA_OPT_END:
+ 		different = 0;
+ 		break;
+ 	case TOKEN_NUMBER:
+@@ -1030,6 +1061,7 @@ static int token_different(struct token *t1, struct token *t2)
+ 	case TOKEN_MACRO_ARGUMENT:
+ 	case TOKEN_QUOTED_ARGUMENT:
+ 	case TOKEN_STR_ARGUMENT:
++	case TOKEN_VA_OPT_START:
+ 		different = t1->argnum != t2->argnum;
+ 		break;
+ 	case TOKEN_CHAR_EMBEDDED_0 ... TOKEN_CHAR_EMBEDDED_3:
+@@ -1291,21 +1323,94 @@ Econcat:
+ 	return NULL;
+ }
+ 
++static int find_vararg_index(struct token *arglist)
++{
++	struct token *p;
++	int nr = 0;
++
++	if (!arglist)
++		return -1;
++	for (p = arglist->next; !eof_token(p); p = p->next->next, nr++) {
++		if (p->next->count.vararg)
++			return nr;
++	}
++	return -1;
++}
++
+ static struct token *parse_expansion(struct token *expansion, struct token *arglist, struct ident *name)
+ {
+ 	struct token *token = expansion;
+ 	struct token **p;
++	struct token *va_opt_start = NULL;
++	int in_va_opt = 0;
++	int va_opt_paren_depth = 0;
++	int vararg_index = find_vararg_index(arglist);
+ 
+ 	if (match_op(token, SPECIAL_HASHHASH))
+ 		goto Econcat;
+ 
+ 	for (p = &expansion; !eof_token(token); p = &token->next, token = *p) {
++		/* Handle __VA_OPT__(...) */
++		if (token_type(token) == TOKEN_IDENT && token->ident == &__VA_OPT___ident) {
++			struct token *next = token->next;
++
++			if (vararg_index < 0)
++				goto Eva_opt_nonva;
++			if (in_va_opt)
++				goto Eva_opt_nested;
++			if (!match_op(next, '('))
++				goto Eva_opt_paren;
++
++			/* Convert __VA_OPT__ token to TOKEN_VA_OPT_START */
++			token_type(token) = TOKEN_VA_OPT_START;
++			token->argnum = vararg_index;
++
++			/* Remove the '(' token from the list */
++			token->next = next->next;
++			__free_token(next);
++
++			/* C23: ## cannot be first token inside __VA_OPT__ */
++			if (match_op(token->next, SPECIAL_HASHHASH))
++				goto Eva_opt_hashhash;
++
++			va_opt_start = token;
++			in_va_opt = 1;
++			va_opt_paren_depth = 0;
++			continue;
++		}
++
++		/* Track parentheses inside __VA_OPT__(...) */
++		if (in_va_opt) {
++			if (match_op(token, '(')) {
++				va_opt_paren_depth++;
++			} else if (match_op(token, ')')) {
++				if (va_opt_paren_depth == 0) {
++					/* C23: ## cannot be last inside __VA_OPT__ */
++					if (token_type(va_opt_start) == TOKEN_CONCAT)
++						goto Eva_opt_hashhash;
++					/* This is the closing ) of __VA_OPT__ */
++					token_type(token) = TOKEN_VA_OPT_END;
++					in_va_opt = 0;
++					continue;
++				}
++				va_opt_paren_depth--;
++			}
++		}
++
+ 		if (match_op(token, '#')) {
+ 			token = handle_hash(p, arglist);
+ 			if (!token)
+ 				return NULL;
+ 		}
+ 		if (match_op(token->next, SPECIAL_HASHHASH)) {
++			/* C23: ## cannot be last inside __VA_OPT__ */
++			if (in_va_opt && va_opt_paren_depth == 0) {
++				struct token *t = token->next;
++				while (match_op(t, SPECIAL_HASHHASH))
++					t = t->next;
++				if (match_op(t, ')'))
++					goto Eva_opt_hashhash;
++			}
+ 			token = handle_hashhash(token, arglist);
+ 			if (!token)
+ 				return NULL;
+@@ -1314,7 +1419,15 @@ static struct token *parse_expansion(struct token *expansion, struct token *argl
+ 		}
+ 		if (token_type(token) == TOKEN_ERROR)
+ 			goto Earg;
++		if (in_va_opt)
++			va_opt_start = token;
+ 	}
++
++	if (in_va_opt) {
++		sparse_error(expansion->pos, "unterminated __VA_OPT__");
++		return NULL;
++	}
++
+ 	token = alloc_token(&expansion->pos);
+ 	token_type(token) = TOKEN_UNTAINT;
+ 	token->ident = name;
+@@ -1328,8 +1441,21 @@ Econcat:
+ Earg:
+ 	sparse_error(token->pos, "too many instances of argument in body");
+ 	return NULL;
++Eva_opt_nonva:
++	sparse_error(token->pos, "__VA_OPT__ can only appear in the expansion of a variadic macro");
++	return NULL;
++Eva_opt_nested:
++	sparse_error(token->pos, "__VA_OPT__ may not be nested");
++	return NULL;
++Eva_opt_paren:
++	sparse_error(token->pos, "__VA_OPT__ must be followed by '('");
++	return NULL;
++Eva_opt_hashhash:
++	sparse_error(token->pos, "'##' cannot appear at either end of __VA_OPT__");
++	return NULL;
+ }
+ 
++
+ static int do_define(struct position pos, struct token *token, struct ident *name,
+ 		     struct token *arglist, struct token *expansion, int attr)
+ {
+@@ -2316,6 +2442,12 @@ static void dump_macro(struct symbol *sym)
+ 		case TOKEN_CONCAT:
+ 			printf("##");
+ 			break;
++		case TOKEN_VA_OPT_START:
++			printf("__VA_OPT__(");
++			break;
++		case TOKEN_VA_OPT_END:
++			printf(")");
++			break;
+ 		case TOKEN_STR_ARGUMENT:
+ 			printf("#");
+ 			/* fall-through */
+diff --git a/token.h b/token.h
+index 9000e0cb6574..8e05672b92cb 100644
+--- a/token.h
++++ b/token.h
+@@ -104,6 +104,8 @@ enum token_type {
+ 	TOKEN_QUOTED_ARGUMENT,
+ 	TOKEN_CONCAT,
+ 	TOKEN_GNU_KLUDGE,
++	TOKEN_VA_OPT_START,
++	TOKEN_VA_OPT_END,
+ 	TOKEN_UNTAINT,
+ 	TOKEN_ARG_COUNT,
+ 	TOKEN_IF,
+diff --git a/tokenize.c b/tokenize.c
+index 54ea348cab91..44b128b74cd9 100644
+--- a/tokenize.c
++++ b/tokenize.c
+@@ -237,6 +237,12 @@ const char *show_token(const struct token *token)
+ 		sprintf(buffer, "<end of '%s'>", stream_name(token->pos.stream));
+ 		return buffer;
+ 
++	case TOKEN_VA_OPT_START:
++		return "__VA_OPT__(";
++
++	case TOKEN_VA_OPT_END:
++		return ")";
++
+ 	case TOKEN_UNTAINT:
+ 		sprintf(buffer, "<untaint>");
+ 		return buffer;
+diff --git a/validation/preprocessor/va-opt-errors.c b/validation/preprocessor/va-opt-errors.c
+new file mode 100644
+index 000000000000..392b272bdea9
+--- /dev/null
++++ b/validation/preprocessor/va-opt-errors.c
+@@ -0,0 +1,38 @@
++/*
++ * __VA_OPT__ error cases (C23 6.10.5)
++ *
++ * Constraints from C23 (N3220 6.10.5):
++ *   - __VA_OPT__ shall only occur in the replacement-list of a
++ *     function-like macro that uses the ellipsis notation.
++ *   - __VA_OPT__ shall not appear within its own replacement tokens.
++ *   - ## shall not appear at either end of __VA_OPT__().
++ */
++
++/* non-variadic macro */
++#define NONVAR(x) __VA_OPT__(,)
++
++/* nested __VA_OPT__ */
++#define NESTED(...) __VA_OPT__(__VA_OPT__(x))
++
++/* not followed by ( */
++#define NOPAREN(...) __VA_OPT__ x
++
++/* ## at start */
++#define HASH_START(...) __VA_OPT__(## x)
++
++/* ## at end */
++#define HASH_END(...) __VA_OPT__(x ##)
++
++/*
++ * check-name: __VA_OPT__ errors (C23)
++ * check-command: sparse -E $file
++ * check-output-ignore
++ *
++ * check-error-start
++preprocessor/va-opt-errors.c:12:19: error: __VA_OPT__ can only appear in the expansion of a variadic macro
++preprocessor/va-opt-errors.c:15:32: error: __VA_OPT__ may not be nested
++preprocessor/va-opt-errors.c:18:22: error: __VA_OPT__ must be followed by '('
++preprocessor/va-opt-errors.c:21:25: error: '##' cannot appear at either end of __VA_OPT__
++preprocessor/va-opt-errors.c:24:34: error: '##' cannot appear at either end of __VA_OPT__
++ * check-error-end
++ */
+diff --git a/validation/preprocessor/va-opt.c b/validation/preprocessor/va-opt.c
+new file mode 100644
+index 000000000000..52814fc2e641
+--- /dev/null
++++ b/validation/preprocessor/va-opt.c
+@@ -0,0 +1,66 @@
++/*
++ * __VA_OPT__ support (C23 6.10.5)
++ */
++
++/* Basic: comma insertion */
++#define A(x, ...) x __VA_OPT__(,) __VA_ARGS__
++A(1)
++A(1, 2)
++A(1, 2, 3)
++
++/* Multiple tokens inside __VA_OPT__ */
++#define B(x, ...) x __VA_OPT__(+ __VA_ARGS__ + 0)
++B(1)
++B(1, 2)
++
++/* Empty __VA_OPT__ content (just controls comma) */
++#define C(...) start __VA_OPT__(, __VA_ARGS__) end
++C()
++C(a)
++C(a, b)
++
++/* __VA_OPT__ with stringify */
++#define D(x, ...) x __VA_OPT__(, #__VA_ARGS__)
++D(1)
++D(1, hello world)
++
++/* Named varargs with __VA_OPT__ */
++#define E(x, args...) x __VA_OPT__(,) args
++E(1)
++E(1, 2)
++
++/* Empty __VA_OPT__() */
++#define F(...) prefix __VA_OPT__() suffix
++F()
++F(1)
++
++/* default_gfp() pattern from the kernel */
++#define __default_gfp(a,...) a
++#define default_gfp(...) __default_gfp(__VA_ARGS__ __VA_OPT__(,) 999)
++default_gfp()
++default_gfp(42)
++
++/*
++ * check-name: __VA_OPT__ support (C23)
++ * check-command: sparse -E $file
++ *
++ * check-output-start
++
++1
++1 , 2
++1 , 2, 3
++1
++1 + 2 + 0
++start end
++start , a end
++start , a, b end
++1
++1 , "hello world"
++1
++1 , 2
++prefix suffix
++prefix suffix
++999
++42
++ * check-output-end
++ */
+-- 
+2.43.0
+

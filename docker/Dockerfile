@@ -80,6 +80,13 @@ RUN pip install -r /home/nipa/requirements.txt
 RUN mkdir -p /home/nipa/.local/share/patatt/ && \
     ln -sf /pgpkeys/.keyring /home/nipa/.local/share/patatt/public
 
-RUN git clone --depth=1 https://git.kernel.org/pub/scm/devel/sparse/sparse.git /tmp/sparse && \
-    cd /tmp/sparse && make -j $(nproc) && make install && \
-    rm -rf /tmp/sparse
+COPY --chown=nipa:nipa sparse-patches/ /home/nipa/sparse-patches/
+
+RUN git clone https://git.kernel.org/pub/scm/devel/sparse/sparse.git /home/nipa/sparse && \
+    cd /home/nipa/sparse && \
+    if [ -d /home/nipa/sparse-patches ]; then \
+        for p in /home/nipa/sparse-patches/*; do \
+            git am "$p"; \
+        done; \
+    fi && \
+    make -j $(nproc) && make install
