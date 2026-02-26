@@ -15,6 +15,7 @@ import datetime
 import lzma
 import os
 import pprint
+import sys
 import threading
 from xml.sax.saxutils import escape as xml_escape
 
@@ -145,7 +146,7 @@ class StdoutLogger(Logger):
             print(' ' * self._level + line)
 
     def _log_flush(self):
-        pass
+        sys.stdout.flush()
 
 
 class XmlLogger(Logger):
