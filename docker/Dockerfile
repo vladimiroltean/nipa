@@ -1,4 +1,4 @@
-FROM debian:trixie
+FROM debian:trixie AS base
 
 # Duplicate uid useradd option is necessary for people who run this as root.
 ARG nipauid
@@ -92,3 +92,19 @@ RUN git clone https://git.kernel.org/pub/scm/devel/sparse/sparse.git /home/nipa/
         done; \
     fi && \
     make -j $(nproc) && make install
+
+# mbox-poller stage
+FROM base AS mbox
+
+USER root
+COPY mbox-poller-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/mbox-poller-entrypoint.sh
+
+USER nipa
+ENV IMAP_INBOX_FOLDER="INBOX"
+ENV EXPUNGE_EMAILS="false"
+ENV SMTP_PORT="587"
+ENV CLEANUP_WORKTREE="true"
+
+ENTRYPOINT ["mbox-poller-entrypoint.sh"]
+CMD ["python3", "-m", "mbox_poller.main"]

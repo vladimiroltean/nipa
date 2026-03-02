@@ -8,3 +8,4 @@ pyinotify
 inotify_simple
 dtschema
 yamllint
+msal
