@@ -35,10 +35,12 @@ file_env() {
 file_env 'IMAP_SERVER'
 file_env 'IMAP_USER'
 file_env 'IMAP_PASSWORD'
+file_env 'IMAP_PASS_CMD'
 file_env 'SMTP_SERVER'
 file_env 'SMTP_PORT'
 file_env 'SMTP_USER'
 file_env 'SMTP_PASSWORD'
+file_env 'SMTP_PASS_CMD'
 file_env 'SMTP_FROM_ADDRESS'
 
 exec "$@"

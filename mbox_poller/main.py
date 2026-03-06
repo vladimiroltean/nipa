@@ -12,7 +12,7 @@ from .constants import (
     LOG_LEVEL, ROLE, MANAGER_CONFIG_FILE, WORKER_CONFIG_FILE,
     HASH_SIZE, WORKER_INDEX, IMAP_SERVER, IMAP_USER, IMAP_PASSWORD,
     IMAP_PASS_CMD, IMAP_INBOX_FOLDER, BLACKLIST_FILE,
-    SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM_ADDRESS,
+    SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASS_CMD, SMTP_PASSWORD, SMTP_FROM_ADDRESS,
     NIPA_INGEST_SCRIPT_PATH, WORKTREE_BASE, NIPA_WORK_DIR
 )
 from .exceptions import GracefulShutdown
@@ -58,11 +58,11 @@ def main():
               logger.critical(f"WORKER_INDEX ({WORKER_INDEX}) is out of valid range [0, {HASH_SIZE-1}].")
               sys.exit(1)
 
-        smtp_auth_ok = bool(os.environ.get('SMTP_PASSWORD'))
+        smtp_auth_ok = bool(os.environ.get('SMTP_PASSWORD') or os.environ.get('SMTP_PASS_CMD'))
         required_env_vars = ['SMTP_SERVER', 'SMTP_USER']
         missing_vars = [var for var in required_env_vars if not os.environ.get(var)]
         if not smtp_auth_ok:
-            missing_vars.append("SMTP_PASSWORD")
+            missing_vars.append("SMTP_PASSWORD or SMTP_PASS_CMD")
         if missing_vars:
             logger.critical(f"Worker missing required env vars: {', '.join(missing_vars)}")
             sys.exit(1)
@@ -89,7 +89,7 @@ def main():
             sys.exit(1)
 
         notifier = SmtpNotifier(SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD,
-                                SMTP_FROM_ADDRESS)
+                                SMTP_PASS_CMD, SMTP_FROM_ADDRESS)
         job_manager = JobManager(NIPA_WORK_DIR, notifier, BLACKLIST_FILE,
                                  WORKER_INDEX, HASH_SIZE, tree_selector)
         job_manager.discover_and_reap_jobs()

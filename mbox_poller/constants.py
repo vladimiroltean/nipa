@@ -34,6 +34,7 @@ POLL_INTERVAL = 60 # seconds
 SMTP_SERVER = os.environ.get('SMTP_SERVER')
 SMTP_PORT = int(os.environ.get('SMTP_PORT', 587))
 SMTP_USER = os.environ.get('SMTP_USER')
+SMTP_PASS_CMD = os.environ.get('SMTP_PASS_CMD')
 SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD')
 SMTP_FROM_ADDRESS = os.environ.get('SMTP_FROM_ADDRESS', 'nipa-builder@example.com')
 

@@ -3,8 +3,10 @@
 # Copyright 2025-2026 NXP
 
 import ssl
+import shlex
 import smtplib
 import logging
+import subprocess
 from pathlib import Path
 from typing import Optional, List, Tuple
 from email.message import EmailMessage
@@ -15,17 +17,21 @@ logger = logging.getLogger(__name__)
 class SmtpNotifier:
     """Handles all SMTP email sending logic and configuration."""
 
-    def __init__(self, server, port, user, password, from_addr):
+    def __init__(self, server, port, user, password, pass_cmd, from_addr):
         self.server = server
         self.port = port
         self.user = user
         self.password = password
+        self.pass_cmd = pass_cmd
         self.from_addr = from_addr
-        self.enabled = bool(server and user and password)
+        self.enabled = bool(server and user and (password or pass_cmd))
         if self.enabled:
-             logger.info("SMTP configured to use standard password authentication.")
+             if self.pass_cmd:
+                  logger.info("SMTP configured to use XOAUTH2 authentication.")
+             else:
+                  logger.info("SMTP configured to use standard password authentication.")
         else:
-             logger.warning("SMTP is not fully configured (missing server, user, or password).")
+             logger.warning("SMTP is not fully configured (missing server, user, password or pass_cmd).")
 
     def send_email(self, to_address: str, subject: str, body: str,
                    cc_addresses: Optional[List[str]] = None,
@@ -69,17 +75,43 @@ class SmtpNotifier:
             with smtplib.SMTP(self.server, self.port) as server:
                 server.starttls(context=context)
 
-                logger.debug(f"Attempting standard LOGIN for user {self.user}")
-                if not self.password:
-                     raise ValueError("SMTP password required but not set")
-                server.login(self.user, self.password)
-                logger.info(f"Standard SMTP authentication successful for {self.user}.")
+                if self.pass_cmd:
+                    logger.debug(f"Attempting SMTP XOAUTH2 authentication for {self.user}")
+                    process = subprocess.run(shlex.split(self.pass_cmd), shell=False,
+                                             capture_output=True, text=True, check=False)
+
+                    if process.returncode != 0:
+                        stdout_output = process.stdout.strip() if process.stdout else "(no stdout)"
+                        stderr_output = process.stderr.strip() if process.stderr else "(no stderr)"
+
+                        logger.error(f"OAuth2 command failed with exit code {process.returncode}")
+                        logger.error(f"Command stdout: {stdout_output}")
+                        logger.error(f"Command stderr: {stderr_output}")
+                        raise subprocess.CalledProcessError(process.returncode, self.pass_cmd,
+                                                            process.stdout, process.stderr)
+
+                    access_token = process.stdout.strip()
+                    if not access_token:
+                        raise ValueError("Command returned empty access token for SMTP")
+
+                    auth_string = f"user={self.user}\1auth=Bearer {access_token}\1\1"
+                    server.auth('XOAUTH2', lambda x: auth_string.encode('utf-8'))
+                    logger.info(f"SMTP XOAUTH2 authentication successful for {self.user}.")
+                else:
+                    logger.debug(f"Attempting standard LOGIN for user {self.user}")
+                    if not self.password:
+                         raise ValueError("SMTP password required but not set")
+                    server.login(self.user, self.password)
+                    logger.info(f"Standard SMTP authentication successful for {self.user}.")
 
                 server.send_message(msg)
             logger.info(f"Email sent successfully.")
 
         except smtplib.SMTPAuthenticationError:
-            logger.error(f"SMTP Authentication (standard password) failed for user {self.user}.")
+            if self.pass_cmd:
+                logger.error(f"SMTP Authentication (XOAUTH2) failed for user {self.user}.")
+            else:
+                logger.error(f"SMTP Authentication (standard password) failed for user {self.user}.")
         except Exception as e:
             logger.error(f"Failed sending email (Subject: {subject}): {e}")
 
