@@ -9,6 +9,7 @@ import logging
 import subprocess
 from typing import List
 from .constants import EXPUNGE_EMAILS
+from .utils import get_oauth2_token
 
 logger = logging.getLogger(__name__)
 
@@ -80,45 +81,10 @@ def connect_to_imap(server, user, password, pass_cmd, inbox_folder) -> imaplib.I
     try:
         if pass_cmd:
             logger.info(f"Attempting IMAP XOAUTH2 authentication for {user}")
-            import shlex
-            process = subprocess.run(shlex.split(pass_cmd), shell=False, capture_output=True,
-                                     text=True, check=False)
+            access_token = get_oauth2_token(pass_cmd, "IMAP")
 
-            if process.returncode != 0:
-                stdout_output = process.stdout.strip() if process.stdout else "(no stdout)"
-                stderr_output = process.stderr.strip() if process.stderr else "(no stderr)"
-
-                # Check for specific network/connectivity issues
-                network_error_indicators = [
-                    'Connection refused',
-                    'Unable to connect to proxy',
-                    'Max retries exceeded',
-                    'ProxyError',
-                    'NewConnectionError',
-                    'HTTPSConnectionPool',
-                    'Network is unreachable',
-                    'Temporary failure in name resolution'
-                ]
-
-                is_network_error = any(indicator in stderr_output for indicator in network_error_indicators)
-
-                if is_network_error:
-                    logger.error("OAuth2 authentication failed due to network connectivity issues")
-                    # Raise a specific exception type for network errors
-                    raise ConnectionError(f"OAuth2 authentication failed due to network connectivity: {stderr_output}")
-                else:
-                    logger.error(f"OAuth2 command failed with exit code {process.returncode}")
-                    logger.error(f"Command stdout: {stdout_output}")
-                    logger.error(f"Command stderr: {stderr_output}")
-                    raise subprocess.CalledProcessError(process.returncode, pass_cmd,
-                                                        process.stdout, process.stderr)
-
-            access_token = process.stdout.strip()
-            if not access_token:
-                raise ValueError("Command returned empty access token for IMAP")
-
-            auth_string = f"user={user}\1auth=Bearer {access_token}\1\1"
-            imap_conn.authenticate('XOAUTH2', lambda x: auth_string.encode('utf-8'))
+            auth_string = f"user={user}\x01auth=Bearer {access_token}\x01\x01"
+            imap_conn.authenticate('XOAUTH2', lambda x=None: auth_string)
             logger.info(f"IMAP XOAUTH2 authentication successful for {user}.")
         else:
             logger.info(f"Attempting standard IMAP LOGIN for {user}")

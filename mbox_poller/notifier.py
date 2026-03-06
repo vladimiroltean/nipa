@@ -3,14 +3,13 @@
 # Copyright 2025-2026 NXP
 
 import ssl
-import shlex
 import smtplib
 import logging
-import subprocess
 from pathlib import Path
 from typing import Optional, List, Tuple
 from email.message import EmailMessage
 from email.utils import parseaddr
+from .utils import get_oauth2_token
 
 logger = logging.getLogger(__name__)
 
@@ -74,28 +73,14 @@ class SmtpNotifier:
             context = ssl.create_default_context()
             with smtplib.SMTP(self.server, self.port) as server:
                 server.starttls(context=context)
+                server.ehlo()
 
                 if self.pass_cmd:
                     logger.debug(f"Attempting SMTP XOAUTH2 authentication for {self.user}")
-                    process = subprocess.run(shlex.split(self.pass_cmd), shell=False,
-                                             capture_output=True, text=True, check=False)
+                    access_token = get_oauth2_token(self.pass_cmd, "SMTP")
 
-                    if process.returncode != 0:
-                        stdout_output = process.stdout.strip() if process.stdout else "(no stdout)"
-                        stderr_output = process.stderr.strip() if process.stderr else "(no stderr)"
-
-                        logger.error(f"OAuth2 command failed with exit code {process.returncode}")
-                        logger.error(f"Command stdout: {stdout_output}")
-                        logger.error(f"Command stderr: {stderr_output}")
-                        raise subprocess.CalledProcessError(process.returncode, self.pass_cmd,
-                                                            process.stdout, process.stderr)
-
-                    access_token = process.stdout.strip()
-                    if not access_token:
-                        raise ValueError("Command returned empty access token for SMTP")
-
-                    auth_string = f"user={self.user}\1auth=Bearer {access_token}\1\1"
-                    server.auth('XOAUTH2', lambda x: auth_string.encode('utf-8'))
+                    auth_string = f"user={self.user}\x01auth=Bearer {access_token}\x01\x01"
+                    server.auth('XOAUTH2', lambda x=None: auth_string, initial_response_ok=False)
                     logger.info(f"SMTP XOAUTH2 authentication successful for {self.user}.")
                 else:
                     logger.debug(f"Attempting standard LOGIN for user {self.user}")
