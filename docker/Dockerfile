@@ -44,6 +44,7 @@ RUN apt-get update && apt-get install -y \
 	libsqlite3-dev \
 	coreutils \
 	jq \
+	codespell \
  && rm -rf /var/lib/apt/lists/*
 
 # Clone and install public-inbox
