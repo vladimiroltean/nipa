@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
 	python3-venv \
 	python3-pip \
 	python3-dev \
+	bsdextrautils \
 	curl \
 	git \
 	gnupg \
