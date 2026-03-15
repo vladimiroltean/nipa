@@ -127,7 +127,10 @@ class Tester(threading.Thread):
         tests = []
         for td in os.listdir(tests_subdir):
             test = f'{name}/{td}'
-            if test not in self.exclude and (len(self.include) == 0 or test in self.include):
+            info_json = os.path.join(tests_subdir, td, 'info.json')
+            if os.path.isfile(info_json) and \
+               test not in self.exclude and \
+               (len(self.include) == 0 or test in self.include):
                 core.log(f"Adding test {test}")
                 tests.append(Test(os.path.join(tests_subdir, td), td))
             else:
