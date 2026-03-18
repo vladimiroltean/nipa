@@ -1,0 +1,4 @@
+{
+  "run": ["build_riscv.sh"],
+  "pull-requests": true
+}

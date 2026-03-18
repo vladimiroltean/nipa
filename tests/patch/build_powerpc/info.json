@@ -1,0 +1,4 @@
+{
+  "run": ["build_powerpc.sh"],
+  "pull-requests": true
+}

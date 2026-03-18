@@ -1,0 +1,4 @@
+{
+  "run": ["build_armv7.sh"],
+  "pull-requests": true
+}

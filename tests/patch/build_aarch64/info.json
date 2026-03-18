@@ -1,0 +1,4 @@
+{
+  "run": ["build_aarch64.sh"],
+  "pull-requests": true
+}
