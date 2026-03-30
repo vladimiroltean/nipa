@@ -1,5 +1,5 @@
 system-status.cfg
-poller.state*
+*poller.state*
 *.config
 *.db
 *.org
