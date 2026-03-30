@@ -19,6 +19,7 @@ prep_config() {
   ./scripts/config --file $output_dir/.config --disable drm_werror
   ./scripts/config --file $output_dir/.config --disable kvm_werror
   ./scripts/config --file $output_dir/.config --enable ppc_disable_werror
+  ./scripts/config --file $output_dir/.config --disable sensors_macsmc_hwmon
 }
 
 echo "Using $build_flags redirect to $tmpfile_o and $tmpfile_n"
