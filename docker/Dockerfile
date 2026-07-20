@@ -48,6 +48,9 @@ RUN apt-get update && apt-get install -y \
 	codespell \
  && rm -rf /var/lib/apt/lists/*
 
+RUN mkdir -p /usr/share/codespell && \
+    ln -sf /usr/lib/python3/dist-packages/codespell_lib/data/dictionary.txt /usr/share/codespell/dictionary.txt
+
 # Clone and install public-inbox
 # The upstream source (https://public-inbox.org/public-inbox.git) is unreliable,
 # often returning "Failed to connect to public-inbox.org port 443 after 464 ms: Connection refused".
