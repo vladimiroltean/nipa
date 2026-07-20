@@ -1,0 +1,26 @@
+From: Nipa Poller <nipa@patchwork.hopto.org>
+Date: Mon, 20 Jul 2026 19:18:00 +0000
+Subject: [PATCH] simplify: check if target is NULL in OP_LABEL simplify
+
+When simplifying OP_LABEL, def->bb_true might be NULL, causing a
+segmentation fault when dereferencing target->ep. Add a check for NULL.
+
+Link: https://lore.kernel.org/linux-sparse/ajKxDqLtrI2kiypt@stanley.mountain/T/#t
+Signed-off-by: Nipa Poller <nipa@patchwork.hopto.org>
+---
+ simplify.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/simplify.c b/simplify.c
+index xxxxxxx..xxxxxxx 100644
+--- a/simplify.c
++++ b/simplify.c
+@@ -2734,7 +2734,7 @@
+ 		break;
+ 	case OP_LABEL:
+ 		target = def->bb_true;
+-		if (!target->ep)
++		if (!target || !target->ep)
+ 			return 0;
+ 		FOR_EACH_PTR(insn->multijmp_list, jmp) {
+ 			if (jmp->target == target)
